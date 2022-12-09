@@ -7,40 +7,56 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const (
-	TelegramID = 0
-)
-
 func Run() {
-	tgToken, botToken := readConfig()
-	notionApi := notion.NewNotionApi(botToken)
-	startBot(tgToken, notionApi)
-}
-
-func startBot(token string, notionApi *notion.NotionApi) {
-	bot, err := tgbotapi.NewBotAPI("MyAwesomeBotToken")
+	tgBot := TgBot{BotAPI: nil, Notion: nil, Token: TelegramApiCode}
+	notion, err := notion.NewNotionApi(NotionApiCode, NotionPageId)
 	if err != nil {
 		log.Panic(err)
 	}
-	bot.Debug = true
+	tgBot.Notion = notion
+	tgBot.startBot()
+}
+
+type TgBot struct {
+	BotAPI *tgbotapi.BotAPI
+	Notion *notion.NotionApi
+	Token  string
+}
+
+func (bot *TgBot) startBot() {
+	botAPI, err := tgbotapi.NewBotAPI(bot.Token)
+	if err != nil {
+		log.Panic(err)
+	}
+	bot.BotAPI = botAPI
+	// bot.BotAPI.Debug = true
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
-	updates := bot.GetUpdatesChan(u)
+	updates := bot.BotAPI.GetUpdatesChan(u)
 
 	for update := range updates {
 		if update.Message != nil {
 			if update.Message.From.ID != TelegramID {
 				continue
 			}
-
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			msg.ReplyToMessageID = update.Message.MessageID
-
-			bot.Send(msg)
+			if len(update.Message.Text) > 0 {
+				go bot.sendNoteToNotion(update.Message)
+			}
 		}
 	}
 }
 
-func readConfig() (string, string) {
-	return "tgToken", "botToken"
+func (bot *TgBot) sendNoteToNotion(message *tgbotapi.Message) {
+	err := bot.Notion.WriteNewNote(message.Text)
+	newMessageText := "✅"
+	if err != nil {
+		newMessageText = "❌"
+		log.Println(err)
+	}
+	msg := tgbotapi.NewMessage(message.Chat.ID, newMessageText)
+	msg.ReplyToMessageID = message.MessageID
+	_, err = bot.BotAPI.Send(msg)
+	if err != nil {
+		log.Println(err)
+	}
 }
