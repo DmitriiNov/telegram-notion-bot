@@ -2,13 +2,22 @@ package telegramnotionbot
 
 import (
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/DmitriiNov/telegram-notion-bot/notion"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func Run() {
-	tgBot := TgBot{BotAPI: nil, Notion: nil, Token: TelegramApiCode}
+	TelegramApiCode := os.Getenv("TELEGRAM_API_CODE")
+	NotionApiCode := os.Getenv("NOTION_API_CODE")
+	TelegramID, err := strconv.Atoi(os.Getenv("TELEGRAM_ID"))
+	if err != nil {
+		log.Panic(err)
+	}
+	NotionPageId := os.Getenv("NOTION_PAGE_ID")
+	tgBot := TgBot{BotAPI: nil, Notion: nil, Token: TelegramApiCode, Id: TelegramID}
 	notion, err := notion.NewNotionApi(NotionApiCode, NotionPageId)
 	if err != nil {
 		log.Panic(err)
@@ -21,6 +30,7 @@ type TgBot struct {
 	BotAPI *tgbotapi.BotAPI
 	Notion *notion.NotionApi
 	Token  string
+	Id     int
 }
 
 func (bot *TgBot) startBot() {
@@ -36,9 +46,11 @@ func (bot *TgBot) startBot() {
 
 	for update := range updates {
 		if update.Message != nil {
-			if update.Message.From.ID != TelegramID {
+			if update.Message.From.ID != int64(bot.Id) {
 				continue
 			}
+			// jsn, _ := json.Marshal(update.Message)
+			// fmt.Println(string(jsn))
 			if len(update.Message.Text) > 0 {
 				go bot.sendNoteToNotion(update.Message)
 			}
@@ -47,7 +59,7 @@ func (bot *TgBot) startBot() {
 }
 
 func (bot *TgBot) sendNoteToNotion(message *tgbotapi.Message) {
-	err := bot.Notion.WriteNewNote(message.Text)
+	err := bot.Notion.WriteNewNote(message)
 	newMessageText := "✅"
 	if err != nil {
 		newMessageText = "❌"

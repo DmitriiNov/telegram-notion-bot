@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jomei/notionapi"
 )
 
@@ -34,14 +35,31 @@ func getTimestamp() string {
 	return fmt.Sprintf("[%s]\n", tm.Format("02.01.06 15:04"))
 }
 
-func (n *NotionApi) WriteNewNote(note string) error {
+func GetRichText(message *tgbotapi.Message) notionapi.RichText {
+	rch := notionapi.RichText{
+		Text:        &notionapi.Text{Content: message.Text},
+		Annotations: &notionapi.Annotations{Bold: true},
+	}
+	for _, ent := range message.Entities {
+		ent := tgbotapi.MessageEntity(ent)
+		url := string([]rune(message.Text)[ent.Offset : ent.Offset+ent.Length])
+		fmt.Println(url)
+		if ent.Type == "url" {
+			rch.Text.Link = &notionapi.Link{Url: url}
+			break
+		}
+	}
+	return rch
+}
+
+func (n *NotionApi) WriteNewNote(message *tgbotapi.Message) error {
 	tm := getTimestamp()
 	blocks := make([]notionapi.Block, 1)
 	blocks[0] = notionapi.ParagraphBlock{
 		Paragraph: notionapi.Paragraph{
 			RichText: []notionapi.RichText{
 				{Text: &notionapi.Text{Content: tm}},
-				{Text: &notionapi.Text{Content: note}, Annotations: &notionapi.Annotations{Bold: true}},
+				GetRichText(message),
 			},
 		},
 		BasicBlock: notionapi.BasicBlock{
